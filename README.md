@@ -17,6 +17,38 @@ BibTeX Reference Manager - A TUI and CLI application for managing BibTeX files.
 
 ## Installation
 
+### From GitHub Releases (Recommended)
+
+Download the latest release asset for your OS/architecture from:
+
+`https://github.com/0froq/bibr/releases/latest`
+
+Expected release archive names:
+
+- `bibr-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz`
+- `bibr-vX.Y.Z-x86_64-apple-darwin.tar.gz`
+- `bibr-vX.Y.Z-x86_64-pc-windows-msvc.zip`
+
+After extraction, move the binary into your PATH:
+
+```bash
+# Linux/macOS
+sudo mv bibr /usr/local/bin/
+```
+
+Windows (PowerShell):
+
+```powershell
+# Example: move binary into a folder already in PATH
+Move-Item .\bibr.exe "$env:USERPROFILE\bin\bibr.exe"
+```
+
+### From GitHub (Cargo)
+
+```bash
+cargo install --git https://github.com/0froq/bibr.git
+```
+
 ### From Source (Cargo)
 
 ```bash
@@ -100,6 +132,14 @@ bibr pdf knuth1984
 ## Configuration
 
 See [docs/config-reference.md](docs/config-reference.md) for full configuration options.
+
+## CI/CD
+
+- Pull requests and pushes to `main` run CI checks in `.github/workflows/ci.yml`
+- Version tags (`v*`) trigger release builds in `.github/workflows/release.yml`
+- Release artifacts include platform archives and SHA256 checksum files
+
+For full release and install details, see [docs/installation.md](docs/installation.md) and [docs/releasing.md](docs/releasing.md).
 
 ## Testing
 
