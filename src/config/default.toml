@@ -1,0 +1,64 @@
+# Default configuration for bibr
+# This is embedded in the binary and serves as fallback for all unspecified values
+
+# BibTeX files to load
+bibtex_files = []
+
+# Search settings
+[search]
+smart_case = true
+fuzzy = true
+search_all_fields = true
+
+# Display settings
+[display]
+format = "{citekey:<15} {author:<20} {title}"
+
+# Keybindings - only override the ones you want to change
+[keybindings]
+up = "k"
+down = "j"
+search = "/"
+quit = "q"
+edit = "e"
+note = "n"
+pdf = "p"
+copy = "y"
+preview = "i"
+page_up = "ctrl+u"
+page_down = "ctrl+d"
+goto_top = "gg"
+goto_bottom = "G"
+
+# Theme colors
+[theme]
+selected_fg = "white"
+selected_bg = "blue"
+highlight_fg = "yellow"
+status_bg = "dark_gray"
+status_fg = "white"
+status_search_bg = "dark_gray"
+status_search_fg = "white"
+help_key_fg = "yellow"
+help_key_bg = "dark_gray"
+help_desc_fg = "white"
+help_desc_bg = "dark_gray"
+entry_normal_fg = "white"
+entry_normal_bg = "black"
+entry_selected_fg = "white"
+entry_selected_bg = "dark_gray"
+entry_focused_fg = "black"
+entry_focused_bg = "cyan"
+list_title_fg = "yellow"
+list_title_bg = "black"
+list_border_fg = "gray"
+list_border_bg = "black"
+cursor_bg = "white"
+search_match_fg = "black"
+search_match_bg = "yellow"
+
+# Notes settings
+[notes]
+notes_dir = "~/.local/share/bibr/notes"
+filename_pattern = "{citekey}.md"
+# template_file = "~/.config/bibr/template.md"

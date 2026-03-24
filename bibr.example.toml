@@ -1,0 +1,103 @@
+# BIBR - BibTeX Reference Manager Configuration
+# Place this file at ~/.config/bibr/bibr.toml
+# Or run: bibr init
+
+# BibTeX files to load (required)
+# Supports multiple files, paths can use ~ for home directory
+bibtex_files = [
+    # "~/3_resources/research/refs/zotero.bib",
+]
+
+# =============================================================================
+# SEARCH SETTINGS
+# =============================================================================
+[search]
+# Smart case: lowercase queries match any case, uppercase queries are case-sensitive
+smart_case = true
+
+# Fuzzy matching: enable for approximate string matching
+fuzzy = true
+
+# Search across all fields by default
+search_all_fields = true
+
+# =============================================================================
+# DISPLAY SETTINGS
+# =============================================================================
+[display]
+# Format for entry list display
+# Available variables: {citekey}, {authors}, {title}, {year}, {journal}
+format = "{authors} - {title} ({citekey})"
+
+# =============================================================================
+# KEYBINDINGS (Vim-style)
+# =============================================================================
+[keybindings]
+up = "k"
+down = "j"
+page_up = "Ctrl+u"
+page_down = "Ctrl+d"
+top = "gg"
+bottom = "G"
+search = "/"
+quit = "q"
+edit = "e"
+note = "n"
+pdf = "p"
+copy = "y"
+copy_and_quit = "Y"
+sort_year = "S"
+sort_author = "A"
+preview = "i"
+"preview[0]" = "1"
+"preview[1,2]" = "2"
+
+# =============================================================================
+# THEME (16-color terminal)
+# =============================================================================
+[theme]
+# Colors: black, red, green, yellow, blue, magenta, cyan, white
+#         bright-black, bright-red, bright-green, bright-yellow, 
+#         bright-blue, bright-magenta, bright-cyan, bright-white
+
+selected_fg = "black"
+selected_bg = "green"
+highlight_fg = "yellow"
+list_border_fg = "gray"
+list_border_bg = "black"
+
+# =============================================================================
+# EXTERNAL TOOLS
+# =============================================================================
+
+# Editor command (uses $EDITOR if not specified)
+# editor = "nvim"
+
+# PDF reader command
+# macOS: "open", Linux: "xdg-open", or specific app like "zathura"
+# pdf_reader = "open"
+
+# =============================================================================
+# NOTES
+# =============================================================================
+[notes]
+# Directory to store notes
+# dir = "~/.local/share/bibr/notes"
+
+# Filename pattern using variables:
+#   {citekey}, {authors}, {title}, {year}
+#   {date} - current date (default: %Y-%m-%d)
+#   {time} - current time (default: %H:%M:%S)
+#   {datetime} - current datetime (default: %Y-%m-%d %H:%M:%S)
+#   {date:FORMAT}, {time:FORMAT}, {datetime:FORMAT} - custom format using chrono specifiers
+#     Common specifiers: %Y (year), %m (month), %d (day), %H (hour), %M (minute), %S (second)
+#     See: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+# Transforms: {citekey:lower}, {citekey:upper}, {authors:slice(0,3)}
+# Author format: {authors:%F %L} (First Last), {authors:%L, %F} (Last, First)
+# Examples:
+#   filename_pattern = "{citekey}-{date:%Y-%m}.md"
+#   filename_pattern = "{authors:%L:lower}-{date:%Y%m%d}.md"
+# filename_pattern = "{citekey}.md"
+
+# Template file for new notes
+# template_file = "~/.config/bibr/template.md"
