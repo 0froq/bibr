@@ -37,10 +37,10 @@ preview = "i"
 "preview[0]" = "1"
 "preview[1,2]" = "2"
 
-# Theme colors (16-color terminal)
+# Theme colors (named colors + hex)
 [theme]
 selected_fg = "black"
-selected_bg = "green"
+selected_bg = "#1A2B3C"
 highlight_fg = "yellow"
 list_border_fg = "gray"
 list_border_bg = "black"
@@ -58,6 +58,9 @@ template_file = "~/.config/bibr/template.md"
 
 > Note: TOML requires quoting keys that contain brackets or commas.
 > Use `"preview[0]"` and `"preview[1,2]"` (quoted), not `preview[0]`.
+
+Theme color values accept either named colors (`black`, `red`, `dark_gray`, `light_blue`, etc.)
+or 24-bit hex values in `#RRGGBB` format.
 
 ## Filename Pattern Variables
 

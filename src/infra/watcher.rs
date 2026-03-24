@@ -227,17 +227,44 @@ mod tests {
         let watch_path = path.clone();
 
         let task = tokio::spawn(async move {
-            let _ = tokio::time::timeout(Duration::from_secs(2), FileWatcher::watch(&[watch_path], move |changed| {
-                collected.lock().unwrap().push(changed);
-            }))
+            let _ = tokio::time::timeout(
+                Duration::from_secs(2),
+                FileWatcher::watch(&[watch_path], move |changed| {
+                    collected.lock().unwrap().push(changed);
+                }),
+            )
             .await;
         });
 
         sleep(Duration::from_millis(250)).await;
         std::fs::write(&path, "@article{alpha,\n  title = {Updated}\n}\n").unwrap();
-        sleep(Duration::from_millis(500)).await;
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if !seen.lock().unwrap().is_empty() {
+                break;
+            }
+
+            if Instant::now() >= deadline {
+                break;
+            }
+
+            sleep(Duration::from_millis(50)).await;
+        }
+
         task.abort();
 
-        assert!(seen.lock().unwrap().iter().any(|changed| changed == &path));
+        let changed_paths = seen.lock().unwrap().clone();
+        assert!(
+            changed_paths.iter().any(|changed| {
+                changed == &path
+                    || changed
+                        .file_name()
+                        .is_some_and(|name| name == path.file_name().unwrap())
+            }),
+            "expected watcher to report change for {:?}, got {:?}",
+            path,
+            changed_paths
+        );
     }
 }

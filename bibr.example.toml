@@ -57,11 +57,11 @@ preview = "i"
 # =============================================================================
 [theme]
 # Colors: black, red, green, yellow, blue, magenta, cyan, white
-#         bright-black, bright-red, bright-green, bright-yellow, 
-#         bright-blue, bright-magenta, bright-cyan, bright-white
+#         dark_gray, light_red, light_green, light_yellow,
+#         light_blue, light_magenta, light_cyan, gray
 
 selected_fg = "black"
-selected_bg = "green"
+selected_bg = "#1A2B3C"
 highlight_fg = "yellow"
 list_border_fg = "gray"
 list_border_bg = "black"

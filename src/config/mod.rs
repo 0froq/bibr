@@ -70,7 +70,10 @@ pub struct Config {
     pub search: SearchConfig,
     pub display: DisplayConfig,
     pub preview: PreviewConfig,
-    #[serde(default = "default_keybindings", deserialize_with = "deserialize_keybindings")]
+    #[serde(
+        default = "default_keybindings",
+        deserialize_with = "deserialize_keybindings"
+    )]
     pub keybindings: HashMap<String, String>,
     pub theme: ThemeConfig,
     #[serde(default = "default_editor")]
@@ -111,24 +114,23 @@ pub struct PreviewConfig {
 impl Default for PreviewConfig {
     fn default() -> Self {
         Self {
-            patterns: vec![
-                PreviewPattern {
-                    name: Some("Default".to_string()),
-                    template: concat!(
-                        "Citekey: {citekey}\n",
-                        "Type: {entry_type}\n",
-                        "\n",
-                        "Title: {title}\n",
-                        "Author(s): {author}\n",
-                        "Year: {year}\n",
-                        "Journal: {journal}\n",
-                        "DOI: {doi}\n",
-                        "\n",
-                        "Abstract:\n",
-                        "{abstract}"
-                    ).to_string(),
-                },
-            ],
+            patterns: vec![PreviewPattern {
+                name: Some("Default".to_string()),
+                template: concat!(
+                    "Citekey: {citekey}\n",
+                    "Type: {entry_type}\n",
+                    "\n",
+                    "Title: {title}\n",
+                    "Author(s): {author}\n",
+                    "Year: {year}\n",
+                    "Journal: {journal}\n",
+                    "DOI: {doi}\n",
+                    "\n",
+                    "Abstract:\n",
+                    "{abstract}"
+                )
+                .to_string(),
+            }],
         }
     }
 }
@@ -456,14 +458,13 @@ pub fn load(path: Option<PathBuf>) -> Result<Config> {
     let config_exists = config_path.exists();
 
     // Start with embedded default config
-    let mut config: Config = toml::from_str(DEFAULT_CONFIG)
-        .context("Failed to parse embedded default config")?;
+    let mut config: Config =
+        toml::from_str(DEFAULT_CONFIG).context("Failed to parse embedded default config")?;
 
     // Apply user config overrides if file exists
     if config_exists {
-        let content = fs::read_to_string(&config_path).with_context(|| {
-            format!("Failed to read config file '{}'", config_path.display())
-        })?;
+        let content = fs::read_to_string(&config_path)
+            .with_context(|| format!("Failed to read config file '{}'", config_path.display()))?;
 
         let partial: PartialConfig = toml::from_str(&content).with_context(|| {
             format!(
@@ -560,7 +561,10 @@ impl Config {
 
             match path.extension().and_then(|ext| ext.to_str()) {
                 Some("bib") => {}
-                _ => bail!("BibTeX file '{}' must have a .bib extension", path.display()),
+                _ => bail!(
+                    "BibTeX file '{}' must have a .bib extension",
+                    path.display()
+                ),
             }
         }
 
@@ -610,7 +614,9 @@ fn default_keybindings() -> HashMap<String, String> {
     ])
 }
 
-fn deserialize_keybindings<'de, D>(deserializer: D) -> std::result::Result<HashMap<String, String>, D::Error>
+fn deserialize_keybindings<'de, D>(
+    deserializer: D,
+) -> std::result::Result<HashMap<String, String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -639,7 +645,10 @@ fn default_notes_dir() -> PathBuf {
 
 fn default_config_path() -> Result<PathBuf> {
     let home = env::var("HOME").context("HOME environment variable not set")?;
-    Ok(PathBuf::from(home).join(".config").join("bibr").join("bibr.toml"))
+    Ok(PathBuf::from(home)
+        .join(".config")
+        .join("bibr")
+        .join("bibr.toml"))
 }
 
 fn project_dirs() -> Result<ProjectDirs> {
@@ -682,12 +691,26 @@ fn validate_theme_color(field: &str, color: &str) -> Result<()> {
         return Ok(());
     }
 
+    if is_hex_color(color) {
+        return Ok(());
+    }
+
     bail!(
-        "Invalid color '{}' for {}. Expected one of: {}",
+        "Invalid color '{}' for {}. Expected one of: {} or a hex color like #RRGGBB",
         color,
         field,
         VALID_THEME_COLORS.join(", ")
     )
+}
+
+fn is_hex_color(color: &str) -> bool {
+    color.len() == 7
+        && color.starts_with('#')
+        && color
+            .as_bytes()
+            .iter()
+            .skip(1)
+            .all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn parse_action_with_params(action: &str) -> (String, Option<&str>) {
@@ -713,9 +736,13 @@ fn validate_preview_params(action: &str, params: Option<&str>, pattern_count: us
         if parts.len() != 2 {
             bail!("Invalid preview range '{action}'. Expected format: preview[start,end]");
         }
-        let start: usize = parts[0].trim().parse()
+        let start: usize = parts[0]
+            .trim()
+            .parse()
             .map_err(|_| anyhow::anyhow!("Invalid preview start index in '{action}'"))?;
-        let end: usize = parts[1].trim().parse()
+        let end: usize = parts[1]
+            .trim()
+            .parse()
             .map_err(|_| anyhow::anyhow!("Invalid preview end index in '{action}'"))?;
         if start >= pattern_count {
             bail!("Preview start index {start} out of bounds (max: {pattern_count})");
@@ -727,7 +754,9 @@ fn validate_preview_params(action: &str, params: Option<&str>, pattern_count: us
             bail!("Preview range start ({start}) must be <= end ({end})");
         }
     } else {
-        let idx: usize = params.trim().parse()
+        let idx: usize = params
+            .trim()
+            .parse()
             .map_err(|_| anyhow::anyhow!("Invalid preview index in '{action}'"))?;
         if idx >= pattern_count {
             bail!("Preview index {idx} out of bounds (max: {pattern_count})");
@@ -755,7 +784,8 @@ mod tests {
         assert_eq!(config.notes.notes_dir, default_notes_dir());
 
         let toml = toml::to_string(&config).expect("default config should serialize");
-        let roundtrip: Config = toml::from_str(&toml).expect("serialized config should deserialize");
+        let roundtrip: Config =
+            toml::from_str(&toml).expect("serialized config should deserialize");
 
         assert_eq!(roundtrip, config);
     }
@@ -814,8 +844,14 @@ template_file = "{}"
         assert!(!config.search.fuzzy);
         assert_eq!(config.display.format, "{title} - {citekey}");
         assert_eq!(config.keybindings.get(UP).map(String::as_str), Some("K"));
-        assert_eq!(config.keybindings.get(SORT_YEAR).map(String::as_str), Some("Y"));
-        assert_eq!(config.keybindings.get(SORT_AUTHOR).map(String::as_str), Some("A"));
+        assert_eq!(
+            config.keybindings.get(SORT_YEAR).map(String::as_str),
+            Some("Y")
+        );
+        assert_eq!(
+            config.keybindings.get(SORT_AUTHOR).map(String::as_str),
+            Some("A")
+        );
         assert_eq!(config.theme.selected_bg, "green");
         assert_eq!(config.editor.as_deref(), Some("nvim"));
         assert_eq!(config.pdf_reader.as_deref(), Some("zathura"));
@@ -840,9 +876,13 @@ template_file = "{}"
             ..Config::default()
         };
 
-        let error = config.validate().expect_err("missing bib file should fail validation");
+        let error = config
+            .validate()
+            .expect_err("missing bib file should fail validation");
         assert!(
-            error.to_string().contains(missing_bib.to_string_lossy().as_ref()),
+            error
+                .to_string()
+                .contains(missing_bib.to_string_lossy().as_ref()),
             "unexpected error: {error}"
         );
     }
@@ -861,33 +901,77 @@ sort_author = "A"
         let config: Config = toml::from_str(input).expect("config should deserialize");
 
         assert_eq!(config.keybindings.get(UP).map(String::as_str), Some("<Up>"));
-        assert_eq!(config.keybindings.get(DOWN).map(String::as_str), Some("<Down>"));
+        assert_eq!(
+            config.keybindings.get(DOWN).map(String::as_str),
+            Some("<Down>")
+        );
         assert_eq!(config.keybindings.get(QUIT).map(String::as_str), Some("ZZ"));
-        assert_eq!(config.keybindings.get(SORT_YEAR).map(String::as_str), Some("Y"));
-        assert_eq!(config.keybindings.get(SORT_AUTHOR).map(String::as_str), Some("A"));
+        assert_eq!(
+            config.keybindings.get(SORT_YEAR).map(String::as_str),
+            Some("Y")
+        );
+        assert_eq!(
+            config.keybindings.get(SORT_AUTHOR).map(String::as_str),
+            Some("A")
+        );
     }
 
     #[test]
     fn parameterized_preview_keybindings_require_quoted_toml_keys() {
-        let input = r#"
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let notes_dir = temp.path().join("notes");
+        fs::create_dir(&notes_dir).expect("notes dir should exist");
+
+        let input = format!(
+            r#"
 bibtex_files = []
 
 [preview]
 patterns = [
-  { name = "A", template = "Title: {title}" },
-  { name = "B", template = "Abstract: {abstract}" },
-  { name = "C", template = "Year: {year}" }
+  {{ name = "A", template = "Title: {{title}}" }},
+  {{ name = "B", template = "Abstract: {{abstract}}" }},
+  {{ name = "C", template = "Year: {{year}}" }}
 ]
+
+[notes]
+notes_dir = "{}"
 
 [keybindings]
 preview = "i"
 "preview[0]" = "1"
 "preview[1,2]" = "2"
-"#;
+"#,
+            notes_dir.display()
+        );
 
-        let config: Config = toml::from_str(input).expect("config with quoted preview keys should deserialize");
-        config.validate().expect("config with in-range preview params should validate");
-        assert_eq!(config.keybindings.get("preview[0]").map(String::as_str), Some("1"));
-        assert_eq!(config.keybindings.get("preview[1,2]").map(String::as_str), Some("2"));
+        let config: Config =
+            toml::from_str(&input).expect("config with quoted preview keys should deserialize");
+        config
+            .validate()
+            .expect("config with in-range preview params should validate");
+        assert_eq!(
+            config.keybindings.get("preview[0]").map(String::as_str),
+            Some("1")
+        );
+        assert_eq!(
+            config.keybindings.get("preview[1,2]").map(String::as_str),
+            Some("2")
+        );
+    }
+
+    #[test]
+    fn theme_color_validation_accepts_hex_rgb() {
+        validate_theme_color("theme.selected_bg", "#1A2B3C")
+            .expect("#RRGGBB theme colors should validate");
+    }
+
+    #[test]
+    fn theme_color_validation_rejects_invalid_hex() {
+        let error = validate_theme_color("theme.selected_bg", "#12GG99")
+            .expect_err("invalid hex should fail validation");
+        assert!(
+            error.to_string().contains("or a hex color like #RRGGBB"),
+            "unexpected error: {error}"
+        );
     }
 }
