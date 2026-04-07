@@ -1,9 +1,12 @@
-use nucleo_matcher::{pattern::{AtomKind, CaseMatching, Normalization, Pattern}, Matcher, Utf32Str};
+use nucleo_matcher::{
+    pattern::{AtomKind, CaseMatching, Normalization, Pattern},
+    Matcher, Utf32Str,
+};
 use regex::Regex;
 
 use crate::{
-    config::SearchConfig,
-    domain::{Bibliography, Entry, EntryId},
+    config::{MatchMode, SearchConfig},
+    domain::{Bibliography, EntryId},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -34,42 +37,15 @@ pub struct SearchEngine {
     config: SearchConfig,
 }
 
-impl Query {
-    pub fn parse(input: &str) -> Self {
-        let qualifiers = qualifier_spans(input);
+const EXACT_MATCH_SCORE: u32 = 100;
+const SEARCH_FIELDS: [&str; 5] = ["author", "title", "year", "journal", "abstract"];
 
-        if qualifiers.is_empty() {
-            return Self {
-                terms: trimmed(input)
-                    .map(|text| vec![QueryTerm::Plain(text.to_string())])
-                    .unwrap_or_default(),
-            };
-        }
-
-        let mut terms = Vec::new();
-
-        if let Some(first) = qualifiers.first() {
-            if let Some(text) = trimmed(&input[..first.start]) {
-                terms.push(QueryTerm::Plain(text.to_string()));
-            }
-        }
-
-        for (index, qualifier) in qualifiers.iter().enumerate() {
-            let text_end = qualifiers
-                .get(index + 1)
-                .map(|next| next.start)
-                .unwrap_or(input.len());
-
-            if let Some(text) = trimmed(&input[qualifier.text_start..text_end]) {
-                terms.push(QueryTerm::Field {
-                    field: qualifier.field.clone(),
-                    text: text.to_string(),
-                });
-            }
-        }
-
-        Self { terms }
-    }
+fn get_match_mode(config: &SearchConfig, field: &str) -> MatchMode {
+    config
+        .fuzzy
+        .get(field)
+        .copied()
+        .unwrap_or(MatchMode::Substring)
 }
 
 impl SearchEngine {
@@ -77,11 +53,7 @@ impl SearchEngine {
         Self { config }
     }
 
-    pub fn search(
-        &self,
-        bibliography: &Bibliography,
-        query: &Query,
-    ) -> Vec<SearchResult> {
+    pub fn search(&self, bibliography: &Bibliography, query: &Query) -> Vec<SearchResult> {
         if query.terms.is_empty() {
             let mut results: Vec<_> = bibliography
                 .iter()
@@ -100,29 +72,58 @@ impl SearchEngine {
 
         for entry in bibliography.iter() {
             let mut total_score = 0;
-            let mut matched = true;
+            let mut all_terms_matched = true;
 
             for term in &query.terms {
-                let (haystack, needle) = match term {
-                    QueryTerm::Plain(text) => (plain_search_text(entry), text.as_str()),
+                match term {
+                    QueryTerm::Plain(text) => {
+                        let mut best_score: Option<u32> = None;
+                        for field_name in SEARCH_FIELDS {
+                            if let Some(field_value) = entry.get_field(field_name) {
+                                let mode = get_match_mode(&self.config, field_name);
+                                if let Some(score) = self.match_with_mode(
+                                    field_value,
+                                    text.as_str(),
+                                    &mut matcher,
+                                    &mut utf32_buf,
+                                    mode,
+                                ) {
+                                    best_score = Some(best_score.map_or(score, |s| s.max(score)));
+                                }
+                            }
+                        }
+
+                        if let Some(score) = best_score {
+                            total_score += score;
+                        } else {
+                            all_terms_matched = false;
+                            break;
+                        }
+                    }
                     QueryTerm::Field { field, text } => {
                         let Some(field_value) = entry.get_field(field) else {
-                            matched = false;
+                            all_terms_matched = false;
                             break;
                         };
-                        (field_value.to_string(), text.as_str())
+
+                        let mode = get_match_mode(&self.config, field);
+                        let Some(score) = self.match_with_mode(
+                            &field_value,
+                            text.as_str(),
+                            &mut matcher,
+                            &mut utf32_buf,
+                            mode,
+                        ) else {
+                            all_terms_matched = false;
+                            break;
+                        };
+
+                        total_score += score;
                     }
-                };
-
-                let Some(score) = self.match_term(&haystack, needle, &mut matcher, &mut utf32_buf) else {
-                    matched = false;
-                    break;
-                };
-
-                total_score += score;
+                }
             }
 
-            if matched {
+            if all_terms_matched {
                 results.push(SearchResult {
                     entry_id: entry.id.clone(),
                     score: total_score,
@@ -134,12 +135,13 @@ impl SearchEngine {
         results
     }
 
-    fn match_term(
+    fn match_with_mode(
         &self,
         haystack: &str,
         needle: &str,
         matcher: &mut Matcher,
         utf32_buf: &mut Vec<char>,
+        mode: MatchMode,
     ) -> Option<u32> {
         if needle.trim().is_empty() {
             return Some(0);
@@ -150,14 +152,25 @@ impl SearchEngine {
             CaseSensitivity::Insensitive => CaseMatching::Ignore,
         };
 
-        let atom_kind = if self.config.fuzzy {
-            AtomKind::Fuzzy
-        } else {
-            AtomKind::Substring
-        };
-
-        let pattern = Pattern::new(needle, case_matching, Normalization::Smart, atom_kind);
-        pattern.score(Utf32Str::new(haystack, utf32_buf), matcher)
+        match mode {
+            MatchMode::Exact => haystack
+                .eq_ignore_ascii_case(needle)
+                .then_some(EXACT_MATCH_SCORE),
+            MatchMode::Fuzzy => {
+                let pattern =
+                    Pattern::new(needle, case_matching, Normalization::Smart, AtomKind::Fuzzy);
+                pattern.score(Utf32Str::new(haystack, utf32_buf), matcher)
+            }
+            MatchMode::Substring => {
+                let pattern = Pattern::new(
+                    needle,
+                    case_matching,
+                    Normalization::Smart,
+                    AtomKind::Substring,
+                );
+                pattern.score(Utf32Str::new(haystack, utf32_buf), matcher)
+            }
+        }
     }
 
     fn case_sensitivity(&self, query: &str) -> CaseSensitivity {
@@ -209,14 +222,6 @@ fn trimmed(text: &str) -> Option<&str> {
     (!trimmed.is_empty()).then_some(trimmed)
 }
 
-fn plain_search_text(entry: &Entry) -> String {
-    ["author", "title", "year", "journal", "abstract"]
-        .into_iter()
-        .filter_map(|field| entry.get_field(field))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 fn sort_results(results: &mut [SearchResult]) {
     results.sort_by(|left, right| {
         right
@@ -226,9 +231,48 @@ fn sort_results(results: &mut [SearchResult]) {
     });
 }
 
+impl Query {
+    pub fn parse(input: &str) -> Self {
+        let qualifiers = qualifier_spans(input);
+
+        if qualifiers.is_empty() {
+            return Self {
+                terms: trimmed(input)
+                    .map(|text| vec![QueryTerm::Plain(text.to_string())])
+                    .unwrap_or_default(),
+            };
+        }
+
+        let mut terms = Vec::new();
+
+        if let Some(first) = qualifiers.first() {
+            if let Some(text) = trimmed(&input[..first.start]) {
+                terms.push(QueryTerm::Plain(text.to_string()));
+            }
+        }
+
+        for (index, qualifier) in qualifiers.iter().enumerate() {
+            let text_end = qualifiers
+                .get(index + 1)
+                .map(|next| next.start)
+                .unwrap_or(input.len());
+
+            if let Some(text) = trimmed(&input[qualifier.text_start..text_end]) {
+                terms.push(QueryTerm::Field {
+                    field: qualifier.field.clone(),
+                    text: text.to_string(),
+                });
+            }
+        }
+
+        Self { terms }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     use std::path::{Path, PathBuf};
 
@@ -250,7 +294,40 @@ mod tests {
     }
 
     fn result_ids(results: Vec<SearchResult>) -> Vec<String> {
-        results.into_iter().map(|result| result.entry_id.0).collect()
+        results
+            .into_iter()
+            .map(|result| result.entry_id.0)
+            .collect()
+    }
+
+    fn test_search_config() -> SearchConfig {
+        let mut fuzzy = HashMap::new();
+        fuzzy.insert("author".to_string(), MatchMode::Fuzzy);
+        fuzzy.insert("title".to_string(), MatchMode::Substring);
+        fuzzy.insert("year".to_string(), MatchMode::Substring);
+        fuzzy.insert("journal".to_string(), MatchMode::Substring);
+        fuzzy.insert("abstract".to_string(), MatchMode::Substring);
+
+        SearchConfig {
+            smart_case: true,
+            fuzzy,
+            search_all_fields: true,
+        }
+    }
+
+    fn substring_search_config() -> SearchConfig {
+        let mut fuzzy = HashMap::new();
+        fuzzy.insert("author".to_string(), MatchMode::Substring);
+        fuzzy.insert("title".to_string(), MatchMode::Substring);
+        fuzzy.insert("year".to_string(), MatchMode::Substring);
+        fuzzy.insert("journal".to_string(), MatchMode::Substring);
+        fuzzy.insert("abstract".to_string(), MatchMode::Substring);
+
+        SearchConfig {
+            smart_case: true,
+            fuzzy,
+            search_all_fields: true,
+        }
     }
 
     #[test]
@@ -324,28 +401,28 @@ mod tests {
     #[test]
     fn empty_query_returns_all_entries() {
         let bibliography = load_fixture_bibliography();
-        let engine = SearchEngine::new(SearchConfig::default());
+        let engine = SearchEngine::new(test_search_config());
 
         let results = engine.search(&bibliography, &Query::parse("   "));
 
         assert_eq!(results.len(), bibliography.len());
-        assert_eq!(result_ids(results), vec![
-            "backus1978",
-            "dijkstra1968",
-            "hopper1952",
-            "knuth1984",
-            "mccarthy1960",
-            "turing1936",
-        ]);
+        assert_eq!(
+            result_ids(results),
+            vec![
+                "backus1978",
+                "dijkstra1968",
+                "hopper1952",
+                "knuth1984",
+                "mccarthy1960",
+                "turing1936",
+            ]
+        );
     }
 
     #[test]
     fn plain_search_matches_real_entries() {
         let bibliography = load_fixture_bibliography();
-        let engine = SearchEngine::new(SearchConfig {
-            fuzzy: false,
-            ..SearchConfig::default()
-        });
+        let engine = SearchEngine::new(substring_search_config());
 
         let results = engine.search(&bibliography, &Query::parse("literate"));
 
@@ -355,10 +432,7 @@ mod tests {
     #[test]
     fn field_specific_search_only_checks_requested_field() {
         let bibliography = load_fixture_bibliography();
-        let engine = SearchEngine::new(SearchConfig {
-            fuzzy: false,
-            ..SearchConfig::default()
-        });
+        let engine = SearchEngine::new(substring_search_config());
 
         let title_results = engine.search(&bibliography, &Query::parse("@title: computer"));
         let author_results = engine.search(&bibliography, &Query::parse("@author: computer"));
@@ -370,7 +444,7 @@ mod tests {
     #[test]
     fn combined_queries_use_and_logic() {
         let bibliography = load_fixture_bibliography();
-        let engine = SearchEngine::new(SearchConfig::default());
+        let engine = SearchEngine::new(test_search_config());
 
         let results = engine.search(&bibliography, &Query::parse("@author: knuth @year: 1984"));
 
@@ -380,28 +454,22 @@ mod tests {
     #[test]
     fn results_are_ranked_by_relevance() {
         let bibliography = load_fixture_bibliography();
-        let engine = SearchEngine::new(SearchConfig::default());
+        let engine = SearchEngine::new(test_search_config());
 
-        // Search for "programming" which appears in both knuth1984 and backus1978
         let results = engine.search(&bibliography, &Query::parse("programming"));
         let ids = result_ids(results);
 
-        // Both should be found
         assert!(ids.contains(&"knuth1984".to_string()));
         assert!(ids.contains(&"backus1978".to_string()));
-        
-        // Results should be sorted by score (higher score first)
-        // Exact match "Programming" in titles should give high scores
         assert!(!ids.is_empty());
     }
 
     #[test]
     fn smart_case_can_be_disabled_in_config() {
         let bibliography = load_fixture_bibliography();
-        let engine = SearchEngine::new(SearchConfig {
-            smart_case: false,
-            ..SearchConfig::default()
-        });
+        let mut config = test_search_config();
+        config.smart_case = false;
+        let engine = SearchEngine::new(config);
 
         let results = engine.search(&bibliography, &Query::parse("@author: KNUTH"));
 
@@ -409,21 +477,41 @@ mod tests {
     }
 
     #[test]
+    fn author_field_uses_fuzzy_by_default() {
+        let bibliography = load_fixture_bibliography();
+        let engine = SearchEngine::new(test_search_config());
+        assert_eq!(engine.config.fuzzy.get("author"), Some(&MatchMode::Fuzzy));
+        let results = engine.search(&bibliography, &Query::parse("@author: Knuth"));
+        assert_eq!(result_ids(results), vec!["knuth1984"]);
+        let results = engine.search(&bibliography, &Query::parse("@author: Knu"));
+        assert_eq!(result_ids(results), vec!["knuth1984"]);
+    }
+
+    #[test]
+    fn title_field_uses_substring_by_default() {
+        let bibliography = load_fixture_bibliography();
+        let engine = SearchEngine::new(test_search_config());
+        let results = engine.search(&bibliography, &Query::parse("@title: literate"));
+        assert_eq!(result_ids(results), vec!["knuth1984"]);
+        assert_eq!(
+            engine.config.fuzzy.get("title"),
+            Some(&MatchMode::Substring)
+        );
+    }
+
+    #[test]
     fn disabling_fuzzy_search_falls_back_to_substring_matching() {
         let bibliography = load_fixture_bibliography();
-        let fuzzy_engine = SearchEngine::new(SearchConfig::default());
-        let substring_engine = SearchEngine::new(SearchConfig {
-            fuzzy: false,
-            ..SearchConfig::default()
-        });
-        let query = Query::parse("ltr prgrmmng");
+        let default_engine = SearchEngine::new(test_search_config());
+        let substring_engine = SearchEngine::new(substring_search_config());
+        let query = Query::parse("programming");
 
-        let fuzzy_results = fuzzy_engine.search(&bibliography, &query);
+        let default_results = default_engine.search(&bibliography, &query);
         let substring_results = substring_engine.search(&bibliography, &query);
 
-        let fuzzy_ids = result_ids(fuzzy_results);
-        assert!(fuzzy_ids.contains(&"knuth1984".to_string()));
-        assert!(fuzzy_ids.contains(&"backus1978".to_string()));
-        assert!(substring_results.is_empty());
+        let default_ids = result_ids(default_results);
+        let substring_ids = result_ids(substring_results);
+        assert!(default_ids.contains(&"knuth1984".to_string()));
+        assert!(substring_ids.contains(&"knuth1984".to_string()));
     }
 }

@@ -7,8 +7,14 @@ bibtex_files = []
 # Search settings
 [search]
 smart_case = true
-fuzzy = true
 search_all_fields = true
+
+[search.fuzzy]
+author = "fuzzy"
+title = "substring"
+year = "substring"
+journal = "substring"
+abstract = "substring"
 
 # Display settings
 [display]

@@ -1,6 +1,6 @@
 [package]
 name = "bibr"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["OhMyOpenCode <hello@example.com>"]
 edition = "2021"
 description = "Initial skeleton for BIBR Rust project"

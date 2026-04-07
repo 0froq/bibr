@@ -84,12 +84,90 @@ pub struct Config {
     pub mouse_enabled: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MatchMode {
+    Fuzzy,
+    Substring,
+    Exact,
+}
+
+impl Default for MatchMode {
+    fn default() -> Self {
+        MatchMode::Substring
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(default)]
 pub struct SearchConfig {
     pub smart_case: bool,
-    pub fuzzy: bool,
+    pub fuzzy: HashMap<String, MatchMode>,
     pub search_all_fields: bool,
+}
+
+impl<'de> Deserialize<'de> for SearchConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum FuzzyValue {
+            Bool(bool),
+            Map(HashMap<String, MatchMode>),
+        }
+
+        #[derive(Deserialize)]
+        struct SearchConfigHelper {
+            #[serde(default)]
+            smart_case: bool,
+            #[serde(default)]
+            fuzzy: Option<FuzzyValue>,
+            #[serde(default)]
+            search_all_fields: bool,
+        }
+
+        let helper = SearchConfigHelper::deserialize(deserializer)?;
+
+        let fuzzy = match helper.fuzzy {
+            Some(FuzzyValue::Bool(true)) => {
+                let mut map = HashMap::new();
+                map.insert("author".to_string(), MatchMode::Fuzzy);
+                map.insert("title".to_string(), MatchMode::Fuzzy);
+                map.insert("year".to_string(), MatchMode::Fuzzy);
+                map.insert("journal".to_string(), MatchMode::Fuzzy);
+                map.insert("abstract".to_string(), MatchMode::Fuzzy);
+                map
+            }
+            Some(FuzzyValue::Bool(false)) => {
+                let mut map = HashMap::new();
+                map.insert("author".to_string(), MatchMode::Substring);
+                map.insert("title".to_string(), MatchMode::Substring);
+                map.insert("year".to_string(), MatchMode::Substring);
+                map.insert("journal".to_string(), MatchMode::Substring);
+                map.insert("abstract".to_string(), MatchMode::Substring);
+                map
+            }
+            Some(FuzzyValue::Map(map)) => map,
+            None => {
+                // Default: author fuzzy, others substring
+                let mut map = HashMap::new();
+                map.insert("author".to_string(), MatchMode::Fuzzy);
+                map.insert("title".to_string(), MatchMode::Substring);
+                map.insert("year".to_string(), MatchMode::Substring);
+                map.insert("journal".to_string(), MatchMode::Substring);
+                map.insert("abstract".to_string(), MatchMode::Substring);
+                map
+            }
+        };
+
+        Ok(SearchConfig {
+            smart_case: helper.smart_case,
+            fuzzy,
+            search_all_fields: helper.search_all_fields,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -196,9 +274,16 @@ impl Default for Config {
 
 impl Default for SearchConfig {
     fn default() -> Self {
+        let mut fuzzy = HashMap::new();
+        fuzzy.insert("author".to_string(), MatchMode::Fuzzy);
+        fuzzy.insert("title".to_string(), MatchMode::Substring);
+        fuzzy.insert("year".to_string(), MatchMode::Substring);
+        fuzzy.insert("journal".to_string(), MatchMode::Substring);
+        fuzzy.insert("abstract".to_string(), MatchMode::Substring);
+
         Self {
             smart_case: true,
-            fuzzy: true,
+            fuzzy,
             search_all_fields: true,
         }
     }
@@ -275,7 +360,7 @@ struct PartialConfig {
 #[derive(Debug, Default, Deserialize)]
 struct PartialSearchConfig {
     smart_case: Option<bool>,
-    fuzzy: Option<bool>,
+    fuzzy: Option<HashMap<String, MatchMode>>,
     search_all_fields: Option<bool>,
 }
 
@@ -369,8 +454,8 @@ impl SearchConfig {
         if let Some(v) = partial.smart_case {
             self.smart_case = v;
         }
-        if let Some(v) = partial.fuzzy {
-            self.fuzzy = v;
+        if let Some(partial_fuzzy) = partial.fuzzy {
+            self.fuzzy.extend(partial_fuzzy);
         }
         if let Some(v) = partial.search_all_fields {
             self.search_all_fields = v;
@@ -775,7 +860,11 @@ mod tests {
         let config = Config::default();
 
         assert!(config.search.smart_case);
-        assert!(config.search.fuzzy);
+        assert_eq!(config.search.fuzzy.get("author"), Some(&MatchMode::Fuzzy));
+        assert_eq!(
+            config.search.fuzzy.get("title"),
+            Some(&MatchMode::Substring)
+        );
         assert!(config.search.search_all_fields);
         assert_eq!(config.display.format, DEFAULT_FORMAT);
         assert_eq!(config.keybindings.get(UP).map(String::as_str), Some("k"));
@@ -841,7 +930,14 @@ template_file = "{}"
 
         assert_eq!(config.bibtex_files, vec![bib_file]);
         assert!(!config.search.smart_case);
-        assert!(!config.search.fuzzy);
+        assert_eq!(
+            config.search.fuzzy.get("author"),
+            Some(&MatchMode::Substring)
+        );
+        assert_eq!(
+            config.search.fuzzy.get("title"),
+            Some(&MatchMode::Substring)
+        );
         assert_eq!(config.display.format, "{title} - {citekey}");
         assert_eq!(config.keybindings.get(UP).map(String::as_str), Some("K"));
         assert_eq!(
